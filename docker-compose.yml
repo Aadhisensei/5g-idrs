@@ -2,8 +2,7 @@
 #
 # Deployment target: the 5G-Core VM (192.168.56.10) only. This VM hosts
 # every NF except the UPF, so it is the correct vantage point for SBI
-# (loopback) and NGAP/PFCP (LAN interface) traffic, matching Figure 3.1
-# in the thesis.
+# (loopback) and NGAP/PFCP (LAN interface) traffic.
 #
 # All services use network_mode: host because the parsers need to
 # capture real interfaces (loopback for SBI, the LAN NIC for
