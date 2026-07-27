@@ -1,17 +1,12 @@
 # 5G Core IDRS -- Phase 1: NWDAF + Protocol Parsers
 #
-# Deployment target: the 5G-Core VM (192.168.56.10) only. This VM hosts
-# every NF except the UPF, so it is the correct vantage point for SBI
-# (loopback) and NGAP/PFCP (LAN interface) traffic.
+# Runs on the 5G-Core VM (192.168.56.10) only -- hosts every NF except
+# the UPF, so it sees SBI (loopback) + NGAP/PFCP (LAN) traffic.
 #
-# All services use network_mode: host because the parsers need to
-# capture real interfaces (loopback for SBI, the LAN NIC for
-# PFCP/NGAP/GTPv2-C/Diameter) rather than a container-private bridge
-# network, and because that also means every service reaches Redis on
-# 127.0.0.1 with no service-discovery DNS needed.
+# network_mode: host everywhere -- parsers need real interfaces, not a
+# bridge, and it keeps Redis reachable on 127.0.0.1 for all services.
 #
-# Run scripts/detect_interfaces.sh first to generate .env with the
-# correct LAN_IFACE for this VM.
+# Run scripts/detect_interfaces.sh first to set LAN_IFACE in .env.
 
 services:
   redis:
