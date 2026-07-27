@@ -117,7 +117,7 @@ docs/              architecture notes
 
 ## Roadmap
 
-- **Phase 1 (this repo)**: protocol parsers + NWDAF telemetry collection
+- **Phase 1 **: protocol parsers + NWDAF telemetry collection
 - **Phase 2**: Threat Evaluation Engine — the ten detection rules (T01–T10),
   dynamic threat scoring, cross-interface temporal correlation via SUPI
 - **Phase 3**: Tiered Alert Manager — SQLite persistence, REST API,
