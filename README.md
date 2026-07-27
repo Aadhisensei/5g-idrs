@@ -132,3 +132,4 @@ thesis, extending the security-centric NWDAF approach of Nair et al.,
 "Security-Centric NWDAF Module for Threat Detection and Mitigation in 5G
 Core Networks" (ICISS 2025).
 "# 5g-idrs" 
+"# 5g-idrs" 
