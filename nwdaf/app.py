@@ -1,19 +1,7 @@
 """
-Custom NWDAF microservice (§3.4.1).
-
-Open5GS has no built-in NWDAF, so this service plays that architectural
-role for the IDRS: it is the single coordination point that consumes
-every parser's events off `ids:events`, holds a short rolling window of
-recent events and per-interface/per-parser counters, and exposes that
-state over a REST API loosely modeled on the real Nnwdaf_AnalyticsInfo
-service (TS 29.520) -- enough for a human (or, in Phase 2, the Threat
-Evaluation Engine) to query "what has this core seen recently".
-
-This is intentionally NOT the Threat Evaluation Engine -- there is no
-scoring or rule evaluation here, only collection and summarisation.
-That keeps this service aligned with the NWDAF's real 3GPP role
-(analytics/telemetry coordination), with detection logic staying a
-separate module as designed in Chapter 3.
+Custom NWDAF stand-in. Reads ids:events, keeps rolling buffer + counts,
+exposes via REST (loosely Nnwdaf_AnalyticsInfo / TS 29.520).
+No scoring here — that's the Threat Evaluation Engine.
 """
 import os
 import threading
@@ -110,9 +98,6 @@ def recent_events(limit: int = 50, parser: Optional[str] = None, supi: Optional[
 
 @app.get("/nnwdaf-analyticsinfo/v1/summary")
 def analytics_summary():
-    """Loosely modeled on Nnwdaf_AnalyticsInfo_Request (TS 29.520) --
-    a coarse point-in-time summary a consumer (e.g. the future Threat
-    Evaluation Engine, or PCF/SMF) could subscribe-and-poll against."""
     with _lock:
         window = list(_recent_events)[-200:]
     if not window:
