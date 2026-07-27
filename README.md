@@ -133,3 +133,4 @@ thesis, extending the security-centric NWDAF approach of Nair et al.,
 Core Networks" (ICISS 2025).
 "# 5g-idrs" 
 "# 5g-idrs" 
+"# 5g-idrs" 
