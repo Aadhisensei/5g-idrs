@@ -42,3 +42,33 @@ correlate across interfaces by SUPI without protocol-specific logic.
 3. SUPI extraction on the SBI parser is a coarse `imsi-`/`suci-` URL
    token scan, not a full JSON body parse. Good enough for T01/T07/T08
    but will need to read PATCH/POST bodies for richer correlation later.
+
+## Operational requirement: start parser-sbi before/alongside the core NFs
+
+**Confirmed root cause, not a bug.** The SBI parser occasionally logged
+`RESPONSE None` for responses on connections that predated its own
+capture start. Root cause, confirmed via `tshark -V` frame inspection:
+HTTP/2 uses HPACK header compression with a per-connection *dynamic*
+table (distinct from the fixed, universal static table of ~61 entries).
+Once a connection has been running a while, repeated header values
+(e.g. `:method: PATCH`) get sent once, added to that connection's
+dynamic table, and referenced afterward purely by index (observed
+indices up to 99+ in this testbed). A passive capture that attaches
+mid-connection has no way to resolve those indices, since it never saw
+them get defined -- this is an inherent property of stateful HTTP/2
+header compression, not a decoding defect.
+
+**Verified fix:** restarting the Open5GS NF systemd services (so all
+SBI connections re-establish) while `parser-sbi` is already up and
+capturing resulted in zero `RESPONSE None` events across dozens of
+subsequent PUT/POST/GET/DELETE exchanges. Confirmed by direct log
+inspection (see project history around 2026-07-28).
+
+**Operational rule going forward:** `parser-sbi` must be started
+before, or restarted alongside, the core NFs. Rebuilding/restarting
+`parser-sbi` alone mid-session (e.g. during development) will
+reintroduce `RESPONSE None` events for the remaining lifetime of
+whatever connections were already established, until those NFs are
+also restarted. This is worth reporting in the thesis as a documented
+limitation of passive HTTP/2 monitoring in stateful-compression
+scenarios, not as an unresolved bug.
