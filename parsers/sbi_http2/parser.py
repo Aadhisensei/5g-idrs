@@ -50,34 +50,40 @@ def main():
         try:
             if not hasattr(pkt, "http2"):
                 continue
-            h2 = pkt.http2
-
-            method = getattr(h2, "headers_method", None)
-            path = getattr(h2, "headers_path", None)
-            status = getattr(h2, "headers_status", None)
-            if not (method or path or status):
+            # Skip fragments still awaiting TCP reassembly -- the real,
+            # fully-decoded HTTP/2 headers only appear on the packet that
+            # completes reassembly. Processing the fragment early is what
+            # produces spurious "RESPONSE None" / method-less events.
+            if hasattr(pkt, "tcp") and hasattr(pkt.tcp, "reassembled_in"):
                 continue
 
-            src = pkt.ip.src if hasattr(pkt, "ip") else None
-            dst = pkt.ip.dst if hasattr(pkt, "ip") else None
+            for h2 in pkt.get_multiple_layers("http2"):
+                method = getattr(h2, "headers_method", None)
+                path = getattr(h2, "headers_path", None)
+                status = getattr(h2, "headers_status", None)
+                if not (method or path or status):
+                    continue
 
-            msg_type = f"{method} {path}" if method else f"RESPONSE {status}"
+                src = pkt.ip.src if hasattr(pkt, "ip") else None
+                dst = pkt.ip.dst if hasattr(pkt, "ip") else None
 
-            event = IDRSEvent(
-                parser="sbi_http2",
-                interface="SBI",
-                msg_type=msg_type.strip(),
-                src_ip=src,
-                dst_ip=dst,
-                supi=extract_supi(str(path)) if path else None,
-                fields={
-                    "method": str(method) if method else None,
-                    "path": str(path) if path else None,
-                    "status": str(status) if status else None,
-                },
-            )
-            publish_event(r, event)
-            print(f"[SBI] {event.msg_type} {src}->{dst}", flush=True)
+                msg_type = f"{method} {path}" if method else f"RESPONSE {status}"
+
+                event = IDRSEvent(
+                    parser="sbi_http2",
+                    interface="SBI",
+                    msg_type=msg_type.strip(),
+                    src_ip=src,
+                    dst_ip=dst,
+                    supi=extract_supi(str(path)) if path else None,
+                    fields={
+                        "method": str(method) if method else None,
+                        "path": str(path) if path else None,
+                        "status": str(status) if status else None,
+                    },
+                )
+                publish_event(r, event)
+                print(f"[SBI] {event.msg_type} {src}->{dst}", flush=True)
         except Exception as e:
             print(f"[SBI parser] error on packet: {e}", flush=True)
 
