@@ -46,11 +46,12 @@ except Exception:
     HAVE_PYCRATE = False
 
 PROCEDURE_NAMES = {
-    # subset of TS 38.413 Table 9.3.8-1, extend as needed
-    0: "AMFConfigurationUpdate", 1: "AMFStatusIndication", 14: "InitialContextSetup",
-    15: "InitialUEMessage", 17: "NASNonDeliveryIndication", 21: "NGSetup",
-    26: "PDUSessionResourceSetup", 33: "RANConfigurationUpdate", 35: "Reset",
-    41: "UEContextRelease", 46: "UplinkNASTransport", 48: "DownlinkNASTransport",
+    # Verified against pycrate's compiled NGAP ASN.1 constants (TS 38.413 §9.3.8).
+    0: "AMFConfigurationUpdate", 1: "AMFStatusIndication", 4: "DownlinkNASTransport",
+    14: "InitialContextSetup", 15: "InitialUEMessage", 17: "LocationReportingFailureIndication",
+    21: "NGSetup", 26: "PDUSessionResourceModify", 29: "PDUSessionResourceSetup",
+    33: "PWSFailureIndication", 35: "RANConfigurationUpdate", 41: "UEContextRelease",
+    46: "UplinkNASTransport", 48: "UplinkRANConfigurationTransfer",
 }
 
 
@@ -95,7 +96,7 @@ def handle(pkt):
 
     layer = pkt.getlayer(SCTPChunkData)
     while layer:
-        payload = bytes(layer.payload) if layer.payload else b""
+        payload = bytes(layer.data) if layer.data else b""
         if not payload:
             layer = layer.payload.getlayer(SCTPChunkData) if layer.payload else None
             continue
@@ -113,7 +114,8 @@ def handle(pkt):
         )
         publish_event(r, event)
         forward_nas_if_present(payload, pkt[IP].src, pkt[IP].dst)
-        print(f"[NGAP] {proc_name} decoded={parsed.get('decoded')} {pkt[IP].src}->{pkt[IP].dst}", flush=True)
+        reason = f" reason={parsed.get('reason')}" if not parsed.get("decoded") else ""
+        print(f"[NGAP] {proc_name} decoded={parsed.get('decoded')}{reason} {pkt[IP].src}->{pkt[IP].dst}", flush=True)
 
         layer = layer.payload.getlayer(SCTPChunkData) if layer.payload else None
 
