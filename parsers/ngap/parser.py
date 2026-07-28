@@ -29,7 +29,7 @@ import sys
 
 sys.path.insert(0, "/app")
 from scapy.all import sniff, IP  # noqa: E402
-from scapy.contrib.sctp import SCTP, SCTPChunkData  # noqa: E402
+from scapy.layers.sctp import SCTP, SCTPChunkData  # noqa: E402
 
 from common.events import IDRSEvent  # noqa: E402
 from common.redis_client import get_redis, publish_event, NAS_RAW_STREAM  # noqa: E402
