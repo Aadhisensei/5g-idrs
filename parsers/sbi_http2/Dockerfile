@@ -1,9 +1,9 @@
 FROM python:3.11-slim
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tshark \
     && rm -rf /var/lib/apt/lists/*
-ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 COPY parsers/sbi_http2/requirements.txt .

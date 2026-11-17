@@ -45,7 +45,8 @@ def flusher():
     while True:
         time.sleep(1.0)
         with _lock:
-            items, _agg_copy = list(_agg.items()), _agg.clear()
+            items = list(_agg.items())
+            _agg.clear()
         for (src, dst, mt, teid, dport), n in items:
             publish_event(r, IDRSEvent(parser="gtpu", interface="N3", msg_type=mt, src_ip=src, dst_ip=dst,
                                        fields={"teid": teid, "count": n, "dst_port": dport}))

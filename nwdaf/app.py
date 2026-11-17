@@ -84,9 +84,20 @@ except Exception as _exc:
     print(f"[NWDAF] persistence disabled ({_exc})", flush=True)
     _store = None
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app):
+    start_consumer()
+    announce_token()
+    yield
+
+
 app = FastAPI(
     title   = "IDRS NWDAF — Full IDS Pipeline",
     version = "0.5.0",
+    lifespan = lifespan,
 )
 app.add_middleware(AuthMiddleware)
 
@@ -263,7 +274,6 @@ def _tick_loop():
         _live.push("tick", t)
 
 
-@app.on_event("startup")
 def start_consumer():
     threading.Thread(target=_consume_loop, daemon=True).start()
     threading.Thread(target=_tick_loop, daemon=True).start()
@@ -462,7 +472,7 @@ def by_rule():
 def nwdaf_threat_analytics():
     threats  = _engine.get_active()
     critical = [t for t in threats if t.severity.value == "CRITICAL"]
-    high     = [t for t in threats if t.severity.value == "WARNING"]
+    warning  = [t for t in threats if t.severity.value == "WARNING"]
     return {
         "analyticsId":     "ABNORMAL_BEHAVIOUR",
         "nwdafInstanceId": "idrs-nwdaf-001",
@@ -470,7 +480,7 @@ def nwdaf_threat_analytics():
         "summary": {
             "total_active": len(threats),
             "critical":     len(critical),
-            "warning":      len(high),
+            "warning":      len(warning),
         },
         "topThreats": [
             {
@@ -636,7 +646,6 @@ async def put_thresholds(request: Request):
         raise HTTPException(400, str(exc))
 
 
-@app.on_event("startup")
 def announce_token():
     print(f"[NWDAF] control token ({'generated' if TOKEN_GENERATED else 'from IDRS_API_TOKEN'}): {API_TOKEN}"
           if TOKEN_GENERATED else "[NWDAF] control token loaded from IDRS_API_TOKEN", flush=True)

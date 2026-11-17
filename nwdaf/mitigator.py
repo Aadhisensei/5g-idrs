@@ -326,5 +326,5 @@ class Mitigator:
 
     @staticmethod
     def _rec(a, action, target, status, detail, endpoint=None, http_status=None, rule_id=None):
-        return MitigationRecord(str(uuid.uuid4()), rule_id or a.threat.rule_id, action, target,
+        return MitigationRecord(str(uuid.uuid4()), rule_id or (a.threat.rule_id if a else "unknown"), action, target,
                                 status, detail, endpoint, http_status)
