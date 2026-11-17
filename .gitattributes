@@ -1,0 +1,8 @@
+# Force LF line endings for all text files so scripts, Dockerfiles, and
+# YAML work correctly on the Ubuntu VMs even when cloned from Windows.
+* text=auto eol=lf
+
+# Explicitly mark binary files
+*.pyc binary
+*.pcap binary
+*.db binary
