@@ -1,0 +1,17 @@
+# GTP-U sensor for rule T09 -- run on the UPF VM (N3 never reaches the Core VM):
+#   cp .env.sensor.example .env && docker compose -f docker-compose.sensor.yml up --build -d
+# Needs REDIS_PASSWORD (same as the Core VM). Then enable the rule on the Core VM:
+#   curl -X PUT -H "X-API-Token: $TOKEN" -d '{"T09": true}' http://<core>:8090/config/rules
+services:
+  parser-gtpu:
+    build:
+      context: .
+      dockerfile: parsers/gtpu/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=${CORE_IP:?set CORE_IP (Core VM LAN address)}
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?set REDIS_PASSWORD (same as on the Core VM)}
+      - GTPU_IFACE=${GTPU_IFACE:-enp0s8}
+    restart: unless-stopped

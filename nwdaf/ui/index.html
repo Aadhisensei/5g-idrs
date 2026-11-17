@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5G IDRS — Live Monitor</title>
+<style>
+:root{
+  --bg:#0b1118; --panel:#111a24; --panel2:#0e1620; --line:#1f2d3d; --text:#d6e2ee; --mute:#7f93a8;
+  --blue:#4ea1ff; --violet:#a78bfa; --green:#34d399; --amber:#fbbf24; --pink:#f472b6; --grey:#94a3b8;
+  --red:#f87171; --orange:#fb923c; --yellow:#facc15;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+h1{font-size:15px;margin:0;letter-spacing:.3px}
+h1 small{color:var(--mute);font-weight:400;margin-left:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--mute)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.live .dot{background:var(--green);box-shadow:0 0 8px var(--green)}
+.warn .dot{background:var(--amber)}
+.spacer{flex:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:var(--mute);border:0;padding:5px 12px;cursor:pointer;font:inherit}
+.seg button.on{background:#1b2a3b;color:var(--text)}
+.seg button.on.enforce{background:#4a1d1d;color:#fecaca}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+main{padding:14px 18px;display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
+.card h2{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--mute);display:flex;align-items:center;gap:8px}
+.card h2 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400}
+.kpis{grid-column:1/-1;display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.kpi .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .s{color:var(--mute);font-size:11px}
+.banner{grid-column:1/-1;display:none;padding:10px 14px;border:1px dashed var(--line);border-radius:10px;color:var(--amber);background:#1a1608}
+/* pipeline */
+.pipe{grid-column:1/-1}
+.flow{display:flex;align-items:stretch;gap:0;overflow-x:auto}
+.node{flex:1;min-width:150px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel2);transition:border-color .3s, box-shadow .3s}
+.node.act{border-color:var(--green);box-shadow:0 0 10px rgba(52,211,153,.25)}
+.node.hot{border-color:var(--red);box-shadow:0 0 12px rgba(248,113,113,.35)}
+.node .t{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.8px}
+.node .n{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.node .d{font-size:11px;color:var(--mute)}
+.arrow{width:30px;display:flex;align-items:center;justify-content:center;color:var(--line);font-size:18px}
+.arrow.flow{color:var(--green);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.35}}
+.plist{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.pp{font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mute)}
+.pp.on{color:var(--green);border-color:#1f5f49}
+/* topology + chart */
+.topo{grid-column:span 6}.chart{grid-column:span 6}
+svg text{fill:var(--text);font:11px system-ui}
+.sub{fill:var(--mute)!important;font-size:10px!important}
+.nodebox{fill:#0e1620;stroke:var(--line);stroke-width:1.5}
+.nodebox.alarm{stroke:var(--red);stroke-width:2.5}
+.edge{stroke:#2a3b4f;stroke-width:2;fill:none}
+.edge.live{stroke-dasharray:6 6;animation:dash 0.7s linear infinite}
+.edge.alarm{stroke:var(--red)!important}
+.edge.dead{stroke-dasharray:3 5;opacity:.5}
+@keyframes dash{to{stroke-dashoffset:-12}}
+canvas{width:100%;height:230px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.lg{cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--mute);user-select:none}
+.lg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.lg.off{opacity:.35}
+.lg b{color:var(--text);font-variant-numeric:tabular-nums}
+/* tables */
+.traffic{grid-column:span 7}.side{grid-column:span 5;display:grid;gap:14px;align-content:start}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+.tools input{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 8px;min-width:120px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:2px 9px;cursor:pointer;color:var(--mute);user-select:none;font-size:11px}
+.chip.on{color:var(--text);background:#1b2a3b}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer;font:inherit;font-size:11px}
+.scroll{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+th{position:sticky;top:0;background:var(--panel2);text-align:left;color:var(--mute);font-weight:500;padding:5px 8px;font-family:system-ui}
+td{padding:3px 8px;border-top:1px solid #16212d;white-space:nowrap;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+tr.row{cursor:pointer}tr.row:hover{background:#142130}
+tr.new{animation:fade 1.2s}
+@keyframes fade{from{background:#1d3a2f}to{background:transparent}}
+.badge{display:inline-block;padding:0 7px;border-radius:4px;font-size:10.5px;font-weight:600;color:#06121c}
+.det{white-space:normal!important;background:#0a121a;color:var(--mute)}
+.det pre{margin:0;white-space:pre-wrap;word-break:break-all}
+.alert{border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:var(--panel2)}
+.alert.new{animation:fade 1.5s}
+.sev-INFO{border-left-color:var(--grey)}.sev-WARNING{border-left-color:var(--yellow)}.sev-CRITICAL{border-left-color:var(--red)}
+.alert .top{display:flex;gap:8px;align-items:center}
+.alert .top .sc{margin-left:auto;font-family:var(--mono)}
+.bar{height:4px;background:#1b2a3b;border-radius:3px;margin:5px 0;overflow:hidden}
+.bar i{display:block;height:100%}
+.alert .meta,.alert .ev{color:var(--mute);font-size:11px;font-family:var(--mono);word-break:break-word}
+.alert .foot{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px}
+.tag{padding:1px 7px;border-radius:4px;border:1px solid var(--line);font-size:10.5px}
+.tag.fwd{color:var(--green);border-color:#1f5f49}.tag.sup{color:var(--amber);border-color:#5a4a14}
+.tag.res{color:var(--mute);text-decoration:line-through}
+.empty{color:var(--mute);padding:14px;text-align:center}
+@media(max-width:1100px){.topo,.chart,.traffic,.side{grid-column:1/-1}.kpis{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>5G Core IDRS <small>live monitor · NWDAF + Threat Engine</small></h1>
+  <span id="conn" class="pill"><span class="dot"></span><span id="connTxt">connecting…</span></span>
+  <span class="pill">uptime <b id="uptime">–</b></span>
+  <span class="spacer"></span>
+  <span class="pill">mitigation</span>
+  <span class="seg" id="modeSeg">
+    <button data-m="off">off</button><button data-m="dry_run">dry-run</button><button data-m="enforce" class="enforce">enforce</button>
+  </span>
+</header>
+
+<main>
+  <div id="banner" class="banner"></div>
+
+  <section class="kpis">
+    <div class="card kpi"><h2>Events / s</h2><div class="v" id="kRate">0</div><div class="s" id="kRateS">live, all interfaces</div></div>
+    <div class="card kpi"><h2>Total events</h2><div class="v" id="kTotal">0</div><div class="s" id="kTotalS">parsed since start</div></div>
+    <div class="card kpi"><h2>Ingest latency</h2><div class="v" id="kLat">–</div><div class="s" id="kLatS">parser → NWDAF (avg / max ms)</div></div>
+    <div class="card kpi"><h2>Active threats</h2><div class="v" id="kThreat">0</div><div class="s" id="kThreatS">detected, not resolved</div></div>
+    <div class="card kpi"><h2>Alerts forwarded</h2><div class="v" id="kFwd">0</div><div class="s" id="kFwdS">CRITICAL → mitigator</div></div>
+    <div class="card kpi"><h2>Mitigation actions</h2><div class="v" id="kMit">0</div><div class="s" id="kMitS">–</div></div>
+  </section>
+
+  <section class="card pipe">
+    <h2>IDS pipeline <span class="r" id="pipeNote"></span></h2>
+    <div class="flow" id="flow"></div>
+  </section>
+
+  <section class="card topo">
+    <h2>Testbed topology <span class="r">link thickness &amp; pulse = real traffic seen by the IDS</span></h2>
+    <svg id="topo" viewBox="0 0 640 300" width="100%"></svg>
+  </section>
+
+  <section class="card chart">
+    <h2>Traffic by interface <span class="r">events / s · red line = detection</span></h2>
+    <canvas id="chart"></canvas>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="card traffic">
+    <h2>Live control-plane traffic <span class="r" id="trafficNote"></span></h2>
+    <div class="tools">
+      <span id="chips"></span>
+      <input id="q" placeholder="filter text (supi, msg, ip…)">
+      <button class="btn" id="pause">Pause</button>
+      <button class="btn" id="clear">Clear</button>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>time</th><th>if</th><th>parser</th><th>message</th><th>src → dst</th><th>details</th></tr></thead>
+      <tbody id="rows"></tbody></table>
+      <div id="rowsEmpty" class="empty">Waiting for traffic from the parsers…</div></div>
+  </section>
+
+  <section class="side">
+    <div class="card"><h2>Detections &amp; alerts</h2><div id="alerts" class="scroll" style="max-height:340px;padding:8px"><div class="empty">No detections yet — nothing suspicious seen.</div></div></div>
+    <div class="card"><h2>Mitigation log</h2><div class="scroll" style="max-height:190px"><table>
+      <thead><tr><th>time</th><th>rule</th><th>action</th><th>status</th><th>detail</th></tr></thead>
+      <tbody id="mit"></tbody></table><div id="mitEmpty" class="empty">No mitigation activity.</div></div></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const COLORS = {N2:'#4ea1ff', N1:'#a78bfa', N4:'#34d399', SBI:'#fbbf24', S11:'#f472b6', S6a:'#94a3b8'};
+const SEV = {INFO:'#94a3b8', WARNING:'#facc15', CRITICAL:'#f87171'};   // thesis tiers (score 0-100)
+const ST  = {dry_run:'#facc15', executed:'#34d399', failed:'#f87171', skipped:'#94a3b8', notified:'#4ea1ff'};
+const WINDOW = 90;                      // seconds shown in the chart
+const MAX_ROWS = 150;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const colorOf = i => COLORS[i] || '#' + [...String(i)].reduce((h,c)=> (h*31 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(6,'0').slice(0,6);
+const fmtTime = t => { const d = new Date(t*1000); return d.toLocaleTimeString('en-GB',{hour12:false}) + '.' + String(d.getMilliseconds()).padStart(3,'0'); };
+const fmtUp = s => { s = Math.floor(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+'h ':'') + (h||m?m+'m ':'') + x + 's'; };
+const fmtN = n => (n ?? 0).toLocaleString('en-US');
+
+const S = { boot:null, topo:{core:'?',upf:'?',gnb:'?',ue:'?'}, es:null, paused:false, q:'',
+  hidden:new Set(), ifaces:new Set(), series:{}, marks:[], seenEv:new Set(), seenAl:new Set(),
+  lastTick:null, lastTickAt:0, prev:{}, rate:{}, alarm:{}, alertIdx:{}, hasMitigator:true };
+
+/* ------------------------------------------------------------ control calls (token) */
+async function api(method, url){
+  const go = () => fetch(url, {method, headers: {'X-API-Token': sessionStorage.getItem('idrs_token') || ''}});
+  let r = await go();
+  if (r.status === 401){
+    const t = prompt('Control token (printed in `docker compose logs nwdaf`, or your IDRS_API_TOKEN):');
+    if (!t) return r;
+    sessionStorage.setItem('idrs_token', t.trim()); r = await go();
+    if (r.status === 401) sessionStorage.removeItem('idrs_token');
+  }
+  return r;
+}
+
+/* ------------------------------------------------------------ rendering: events */
+function brief(e){
+  const f = e.fields || [], out = [];
+  if (e.supi) out.push('supi ' + e.supi);
+  if (f.amf_ue_ngap_id != null || f.ran_ue_ngap_id != null) out.push('ue ' + (f.amf_ue_ngap_id ?? '-') + '/' + (f.ran_ue_ngap_id ?? '-'));
+  if (e.session_id) out.push('sess ' + e.session_id);
+  if (f.fseid) out.push('fseid ' + f.fseid);
+  if (f.status) out.push('status ' + f.status);
+  if (f.cause) out.push('cause ' + f.cause);
+  if (f.teid != null) out.push('teid ' + f.teid);
+  if (f.has_nas_pdu) out.push('nas-pdu');
+  if (f.decoded === false) out.push('undecoded');
+  if (f.user_agent) out.push('ua ' + f.user_agent);
+  return out.join(' · ');
+}
+function matches(e){
+  if (S.ifaces.size && !S.ifaces.has(e.interface)) return false;
+  if (!S.q) return true;
+  return (e.interface + ' ' + e.parser + ' ' + e.msg_type + ' ' + (e.src_ip||'') + ' ' + (e.dst_ip||'') + ' ' + brief(e)).toLowerCase().includes(S.q);
+}
+function rowHtml(e, isNew){
+  const c = colorOf(e.interface);
+  const msg = e.parser === 'sbi_http2' ? e.msg_type : e.msg_type;
+  return `<tr class="row${isNew?' new':''}" data-id="${esc(e.event_id)}"><td>${fmtTime(e.timestamp)}</td>` +
+    `<td><span class="badge" style="background:${c}">${esc(e.interface)}</span></td><td>${esc(e.parser)}</td>` +
+    `<td title="${esc(msg)}">${esc(msg)}</td><td>${esc(e.src_ip||'–')} → ${esc(e.dst_ip||'–')}</td><td title="${esc(brief(e))}">${esc(brief(e))}</td></tr>`;
+}
+const evById = new Map();
+function addEvent(e, isNew=true){
+  if (S.seenEv.has(e.event_id)) return;
+  S.seenEv.add(e.event_id); evById.set(e.event_id, e);
+  if (S.seenEv.size > 4000){ const it = S.seenEv.values().next().value; S.seenEv.delete(it); evById.delete(it); }
+  if (!S.ifaces.has(e.interface)) ensureChip(e.interface);
+  if (S.paused || !matches(e)) return;
+  $('rows').insertAdjacentHTML('afterbegin', rowHtml(e, isNew));
+  while ($('rows').children.length > MAX_ROWS) $('rows').lastElementChild.remove();
+  $('rowsEmpty').style.display = 'none';
+}
+const known = new Set();
+function ensureChip(i){
+  if (known.has(i)) return; known.add(i);
+  const el = document.createElement('span'); el.className = 'chip'; el.textContent = i;
+  el.style.borderColor = colorOf(i);
+  el.onclick = () => { S.ifaces.has(i) ? S.ifaces.delete(i) : S.ifaces.add(i); el.classList.toggle('on'); rerenderRows(); };
+  $('chips').appendChild(el);
+}
+function rerenderRows(){
+  $('rows').innerHTML = '';
+  const list = [...evById.values()].filter(matches).slice(-MAX_ROWS);
+  list.forEach(e => $('rows').insertAdjacentHTML('afterbegin', rowHtml(e, false)));
+  $('rowsEmpty').style.display = list.length ? 'none' : '';
+}
+$('rows').addEventListener('click', ev => {
+  const tr = ev.target.closest('tr.row'); if (!tr) return;
+  const nxt = tr.nextElementSibling;
+  if (nxt && nxt.classList.contains('detrow')) { nxt.remove(); return; }
+  const e = evById.get(tr.dataset.id); if (!e) return;
+  tr.insertAdjacentHTML('afterend', `<tr class="detrow"><td colspan="6" class="det"><pre>${esc(JSON.stringify(e, null, 2))}</pre></td></tr>`);
+});
+$('q').oninput = e => { S.q = e.target.value.trim().toLowerCase(); rerenderRows(); };
+$('pause').onclick = () => { S.paused = !S.paused; $('pause').textContent = S.paused ? 'Resume' : 'Pause'; if (!S.paused) rerenderRows(); };
+$('clear').onclick = () => { evById.clear(); S.seenEv.clear(); rerenderRows(); };
+
+/* ------------------------------------------------------------ rendering: alerts */
+function evidence(ev){ return Object.entries(ev || {}).map(([k,v]) => k + '=' + (typeof v === 'object' ? JSON.stringify(v) : v)).join('  '); }
+function alertHtml(a, isNew){
+  const col = SEV[a.severity] || '#94a3b8';
+  const tag = a.forwarded ? `<span class="tag fwd">forwarded → ${esc(a.recommended_action||'—')}</span>`
+            : a.suppressed ? `<span class="tag sup">suppressed (cooldown)</span>`
+            : `<span class="tag">logged only (${esc(a.severity)})</span>`;
+  return `<div class="alert sev-${esc(a.severity)}${isNew?' new':''}" data-tid="${esc(a.threat_id)}">` +
+    `<div class="top"><b style="color:${col}">${esc(a.rule_id)}</b><span>${esc(a.rule_name)}</span><span class="sc">${Number(a.score).toFixed(1)}</span></div>` +
+    `<div class="bar"><i style="width:${Math.max(2, Math.min(100, Math.round(a.score)))}%;background:${col}"></i></div>` +
+    `<div class="meta">${esc(a.severity)} · ${esc(a.interface)}/${esc(a.parser)} · ${fmtTime(a.detected_at)} · src ${esc(a.src_ip||'–')}${a.supi?' · '+esc(a.supi):''}</div>` +
+    `<div class="ev">${esc(evidence(a.evidence))}</div>` +
+    `<div class="foot">${tag}<span style="flex:1"></span><button class="btn res" data-tid="${esc(a.threat_id)}">Resolve</button></div></div>`;
+}
+function addAlert(a, isNew=true){
+  if (S.seenAl.has(a.threat_id)) return; S.seenAl.add(a.threat_id);
+  const box = $('alerts'); if (box.querySelector('.empty')) box.innerHTML = '';
+  box.insertAdjacentHTML('afterbegin', alertHtml(a, isNew));
+  while (box.children.length > 60) box.lastElementChild.remove();
+  if (isNew){
+    S.marks.push(a.detected_at);
+    const key = (a.interface === 'N1') ? 'N2' : a.interface;
+    S.alarm[key] = Date.now() + 8000;
+  }
+}
+$('alerts').addEventListener('click', async ev => {
+  const b = ev.target.closest('button.res'); if (!b) return;
+  const r = await api('DELETE', '/threats/' + b.dataset.tid).catch(() => null);
+  const card = b.closest('.alert');
+  if (r && r.ok){ card.style.opacity = .45; b.remove(); card.querySelector('.foot').insertAdjacentHTML('afterbegin', '<span class="tag res">resolved</span>'); }
+  else { b.textContent = 'not active'; b.disabled = true; }
+});
+
+/* ------------------------------------------------------------ rendering: mitigation */
+function addMit(m, isNew=true){
+  if (S.seenAl.has('m' + m.mitigation_id)) return; S.seenAl.add('m' + m.mitigation_id);
+  $('mitEmpty').style.display = 'none';
+  const c = ST[m.status] || '#94a3b8';
+  $('mit').insertAdjacentHTML('afterbegin',
+    `<tr class="${isNew?'new':''}"><td>${fmtTime(m.executed_at)}</td><td>${esc(m.rule_id)}</td><td>${esc(m.action)}</td>` +
+    `<td><span class="badge" style="background:${c}">${esc(m.status)}</span></td><td title="${esc(m.detail)}">${esc(m.detail)}${m.can_rollback ? ` <button class="btn rb" data-mid="${esc(m.mitigation_id)}">Rollback</button>` : ''}</td></tr>`);
+  while ($('mit').children.length > 80) $('mit').lastElementChild.remove();
+}
+
+$('mit').addEventListener('click', async ev => {
+  const b = ev.target.closest('button.rb'); if (!b) return;
+  if (!confirm('Roll back this mitigation action?')) return;
+  const r = await api('POST', '/mitigation/' + b.dataset.mid + '/rollback');
+  if (r && r.ok){ b.replaceWith(document.createTextNode(' (rolled back)')); }
+  else { b.textContent = r && r.status === 409 ? 'not reversible' : 'failed'; b.disabled = true; }
+});
+
+/* ------------------------------------------------------------ pipeline + KPIs */
+const NODES = [
+  {id:'cap',  t:'Capture + parsers'}, {id:'redis',t:'Redis ids:events'}, {id:'nwdaf', t:'NWDAF consumer'},
+  {id:'eng',  t:'Threat engine'},     {id:'alm',  t:'Alert manager'},    {id:'mit',   t:'Mitigator'}];
+function buildPipe(){
+  $('flow').innerHTML = NODES.map((n,i) => `<div class="node" id="n-${n.id}"><div class="t">${n.t}</div><div class="n" id="nn-${n.id}">–</div><div class="d" id="nd-${n.id}"></div>${n.id==='cap'?'<div class="plist" id="plist"></div>':''}</div>` + (i < NODES.length-1 ? `<div class="arrow" id="a-${i}">▶</div>` : '')).join('');
+}
+function setNode(id, big, sub, active, hot){
+  $('nn-'+id).textContent = big; $('nd-'+id).textContent = sub;
+  const n = $('n-'+id); n.classList.toggle('act', !!active); n.classList.toggle('hot', !!hot);
+}
+function updatePipe(t){
+  const sum = o => Object.values(o||{}).reduce((a,b)=>a+b,0);
+  const total = t.total_events ?? 0, rate = sum(t.rate);
+  const eng = t.engine||{}, al = t.alerts||{}, mi = t.mitigation||{};
+  const d = (k, v) => { const x = (S.prev[k] ?? v) !== v; S.prev[k] = v; return x; };
+  const aCap = rate > 0, aEng = d('eval', eng.evaluated), aAl = d('alr', al.received), aMi = d('mit', mi.total);
+  setNode('cap', fmtN(total), `${rate}/s live`, aCap);
+  setNode('redis', rate + '/s', 'stream ids:events', aCap);
+  setNode('nwdaf', fmtN(total), t.lat_avg_ms != null ? `avg ${t.lat_avg_ms} ms` : 'idle', aCap);
+  setNode('eng', fmtN(eng.evaluated), `fired ${fmtN(eng.fired)} · active ${fmtN(eng.active)}`, aEng, (eng.active||0) > 0);
+  setNode('alm', fmtN(al.received), `suppr ${fmtN(al.suppressed)} · fwd ${fmtN(al.forwarded)}`, aAl);
+  setNode('mit', fmtN(mi.total), S.hasMitigator ? `mode ${t.mitigation_mode}` : 'Phase 4 not installed', aMi);
+  [0,1,2,3,4].forEach(i => $('a-'+i).classList.toggle('flow', i<2 ? aCap : i===2 ? aEng : i===3 ? aAl : aMi));
+  const ages = t.parser_age_sec || {};
+  const all = new Set([...Object.keys(t.by_parser||{}), ...Object.keys(ages)]);
+  $('plist').innerHTML = [...all].sort().map(p => `<span class="pp ${ages[p] != null && ages[p] < 15 ? 'on':''}" title="${ages[p] != null ? 'last event '+ages[p]+'s ago' : 'never seen'}">${esc(p)}</span>`).join('');
+}
+function updateKpis(t){
+  const rate = Object.values(t.rate||{}).reduce((a,b)=>a+b,0);
+  $('kRate').textContent = rate;
+  $('kRateS').textContent = Object.entries(t.rate||{}).map(([k,v]) => k+' '+v).join(' · ') || 'no traffic this second';
+  $('kTotal').textContent = fmtN(t.total_events);
+  $('kTotalS').textContent = t.replayed_total ? `${fmtN(t.replayed_total)} historical events replayed` : 'parsed since start';
+  $('kLat').textContent = t.lat_avg_ms != null ? t.lat_avg_ms + ' / ' + t.lat_max_ms : '–';
+  const a = (t.engine||{}).active || 0;
+  $('kThreat').textContent = a; $('kThreat').style.color = a ? 'var(--red)' : '';
+  $('kFwd').textContent = ((t.alerts||{}).forwarded) || 0;
+  const m = t.mitigation || {};
+  $('kMit').textContent = m.total || 0;
+  $('kMitS').textContent = S.hasMitigator ? `mode ${t.mitigation_mode} · ${m.executed||0} sent · ${m.dry_run||0} dry-run · ${m.skipped||0} skipped` : 'Phase 4 not installed';
+  $('uptime').textContent = fmtUp(t.uptime);
+  const ban = $('banner');
+  if (!t.total_events){ ban.style.display = 'block'; ban.textContent = 'No traffic received yet. Parsers are not publishing — start the testbed (Open5GS core → nr-gnb on the gNB VM → nr-ue on the UE VM) and check the parser containers.'; }
+  else if (!rate && Date.now() - S.lastBusy > 15000){ ban.style.display = 'block'; ban.textContent = 'Idle: no control-plane traffic in the last 15 s. Everything shown below is historical until new traffic arrives.'; }
+  else ban.style.display = 'none';
+  if (rate) S.lastBusy = Date.now();
+  const seg = $('modeSeg').children;
+  for (const b of seg){ b.classList.toggle('on', b.dataset.m === t.mitigation_mode); b.disabled = !S.hasMitigator; }
+}
+S.lastBusy = Date.now();
+
+/* ------------------------------------------------------------ topology */
+function buildTopo(){
+  const T = S.topo, svg = $('topo');
+  const box = (x,y,w,h,id,title,ip,extra='') => `<g><rect class="nodebox" id="${id}" x="${x}" y="${y}" width="${w}" height="${h}" rx="10"/><text x="${x+w/2}" y="${y+22}" text-anchor="middle" font-weight="600">${title}</text><text class="sub" x="${x+w/2}" y="${y+38}" text-anchor="middle">${esc(ip)}</text>${extra}</g>`;
+  svg.innerHTML =
+    `<line id="e-uu" class="edge dead" x1="110" y1="95" x2="170" y2="95"/><text class="sub" x="140" y="85" text-anchor="middle">Uu (sim)</text>` +
+    `<line id="e-n2" class="edge" x1="260" y1="95" x2="330" y2="95"/><text class="sub" id="t-n2" x="295" y="82" text-anchor="middle">N2 NGAP</text><text class="sub" id="r-n2" x="295" y="112" text-anchor="middle">0/s</text>` +
+    `<line id="e-n4" class="edge" x1="490" y1="95" x2="530" y2="95"/><text class="sub" id="t-n4" x="510" y="82" text-anchor="middle">N4</text><text class="sub" id="r-n4" x="510" y="112" text-anchor="middle">0/s</text>` +
+    `<path id="e-n3" class="edge dead" d="M215 150 C215 250, 585 250, 585 150"/><text class="sub" x="400" y="262" text-anchor="middle">N3 GTP-U gNB ↔ UPF — not on the core VM, invisible to the IDS</text>` +
+    box(10,60,100,70,'b-ue','UE',T.ue,'<text class="sub" x="60" y="112" text-anchor="middle">nr-ue</text>') +
+    box(170,60,90,70,'b-gnb','gNB',T.gnb,'<text class="sub" x="215" y="112" text-anchor="middle">nr-gnb</text>') +
+    box(330,20,160,150,'b-core','5G Core',T.core,
+      `<text class="sub" x="410" y="62" text-anchor="middle">AMF · SMF · NRF · UDM</text><text class="sub" x="410" y="76" text-anchor="middle">UDR · AUSF · PCF · NSSF</text>` +
+      `<rect x="345" y="92" width="130" height="30" rx="6" fill="#0b1a2a" stroke="#fbbf24" stroke-opacity=".5"/><text x="410" y="107" text-anchor="middle" style="fill:#fbbf24">SBI (loopback)</text><text class="sub" id="r-sbi" x="410" y="118" text-anchor="middle">0/s</text>` +
+      `<text class="sub" x="410" y="146" text-anchor="middle">NWDAF + IDRS (monitoring here)</text>`) +
+    box(530,60,100,70,'b-upf','UPF',T.upf,'<text class="sub" x="580" y="112" text-anchor="middle">open5gs-upf</text>');
+}
+function updateTopo(t){
+  const r = t.rate || {};
+  const n2 = (r.N2||0) + (r.N1||0), n4 = r.N4||0, sbi = r.SBI||0;
+  const edge = (id, v, ifs) => { const e = $(id); if (!e) return;
+    e.classList.toggle('live', v > 0); e.classList.toggle('dead', false);
+    e.style.strokeWidth = v > 0 ? Math.min(9, 2 + Math.log2(1+v)*1.6) : 2;
+    e.style.stroke = v > 0 ? colorOf(ifs) : ''; };
+  edge('e-n2', n2, 'N2'); edge('e-n4', n4, 'N4');
+  $('r-n2').textContent = n2 + '/s'; $('r-n4').textContent = n4 + '/s'; $('r-sbi').textContent = sbi + '/s';
+  const now = Date.now();
+  $('e-n2').classList.toggle('alarm', (S.alarm.N2||0) > now);
+  $('e-n4').classList.toggle('alarm', (S.alarm.N4||0) > now);
+  $('b-core').classList.toggle('alarm', (S.alarm.SBI||0) > now);
+}
+
+/* ------------------------------------------------------------ chart */
+function pushSeries(t){
+  const now = t.ts; const names = new Set([...Object.keys(S.series), ...Object.keys(t.rate||{})]);
+  names.forEach(n => { (S.series[n] ||= []).push({t:now, v:(t.rate||{})[n] || 0}); S.series[n] = S.series[n].filter(p => now - p.t <= WINDOW + 2); ensureLegend(n); });
+  S.marks = S.marks.filter(m => now - m <= WINDOW + 2);
+  S.cur = t.rate || {};
+}
+const legendDone = new Set();
+function ensureLegend(n){
+  if (legendDone.has(n)) return; legendDone.add(n);
+  const el = document.createElement('span'); el.className = 'lg'; el.id = 'lg-' + n;
+  el.innerHTML = `<i style="background:${colorOf(n)}"></i>${esc(n)} <b id="lv-${n}">0</b>`;
+  el.onclick = () => { S.hidden.has(n) ? S.hidden.delete(n) : S.hidden.add(n); el.classList.toggle('off'); drawChart(); };
+  $('legend').appendChild(el);
+}
+function drawChart(){
+  const cv = $('chart'); const ctx = cv.getContext && cv.getContext('2d'); if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  const L = 34, B = 18, T = 6, w = W-L-4, h = H-B-T, now = S.lastTick ? S.lastTick.ts : Date.now()/1000;
+  let max = 5; Object.entries(S.series).forEach(([n,a]) => { if (!S.hidden.has(n)) a.forEach(p => max = Math.max(max, p.v)); }); max *= 1.15;
+  ctx.strokeStyle = '#1f2d3d'; ctx.fillStyle = '#7f93a8'; ctx.font = '10px system-ui'; ctx.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const y = T + h - h*i/4; ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(L+w,y); ctx.stroke(); ctx.fillText(Math.round(max*i/4), 2, y+3); }
+  [0,30,60,90].forEach(s => { const x = L + w - w*s/WINDOW; ctx.fillText(s ? '-'+s+'s' : 'now', x-10, H-4); });
+  const X = t => L + w - w*(now - t)/WINDOW, Y = v => T + h - h*v/max;
+  ctx.strokeStyle = 'rgba(248,113,113,.8)'; S.marks.forEach(m => { const x = X(m); if (x >= L){ ctx.beginPath(); ctx.moveTo(x,T); ctx.lineTo(x,T+h); ctx.stroke(); } });
+  Object.entries(S.series).forEach(([n,a]) => { if (S.hidden.has(n) || !a.length) return;
+    ctx.strokeStyle = colorOf(n); ctx.lineWidth = 1.8; ctx.beginPath();
+    a.forEach((p,i) => { const x = X(p.t), y = Y(p.v); i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); }); ctx.stroke(); });
+}
+
+/* ------------------------------------------------------------ transport */
+function onTick(t){
+  if (S.boot && t.boot_id !== S.boot){ return boot(); }       // NWDAF restarted -> resync
+  S.lastTick = t; S.lastTickAt = Date.now();
+  S.hasMitigator = t.mitigation_mode !== 'not installed';
+  pushSeries(t); updateKpis(t); updatePipe(t); updateTopo(t); drawChart();
+  Object.keys(S.series).forEach(n => { const e = $('lv-'+n); if (e) e.textContent = (t.rate||{})[n] || 0; });
+  $('trafficNote').textContent = t.feed_dropped_sec ? `table sampled: ${t.feed_dropped_sec} events/s not listed (charts/counters are exact)` : '';
+  setConn('live', 'LIVE');
+}
+function setConn(cls, txt){ const c = $('conn'); c.className = 'pill ' + cls; $('connTxt').textContent = txt; }
+function connect(since){
+  if (S.es) S.es.close();
+  const es = S.es = new EventSource('/stream?since=' + since + '&token=' + encodeURIComponent(sessionStorage.getItem('idrs_token') || ''));
+  es.addEventListener('event',      m => addEvent(JSON.parse(m.data)));
+  es.addEventListener('alert',      m => addAlert(JSON.parse(m.data)));
+  es.addEventListener('mitigation', m => addMit(JSON.parse(m.data)));
+  es.addEventListener('tick',       m => onTick(JSON.parse(m.data)));
+  es.onerror = () => setConn('warn', 'reconnecting…');
+}
+async function boot(){
+  setConn('warn', 'syncing…');
+  try {
+    const resp = await api('GET', '/ui/snapshot');
+    if (resp.status === 401){ setConn('', 'control token required — reload and enter it'); return; }
+    const snap = await resp.json();
+    S.boot = snap.boot_id; S.topo = snap.topology; S.hasMitigator = snap.stats.mitigation_mode !== 'not installed';
+    S.series = {}; S.marks = []; S.seenEv.clear(); S.seenAl.clear(); evById.clear();
+    $('rows').innerHTML = ''; $('alerts').innerHTML = '<div class="empty">No detections yet — nothing suspicious seen.</div>'; $('mit').innerHTML = '';
+    buildTopo(); buildPipe();
+    snap.events.forEach(e => addEvent(e, false));
+    snap.alerts.forEach(a => addAlert(a, false));
+    snap.mitigation.forEach(m => addMit(m, false));
+    $('uptime').textContent = fmtUp(snap.uptime);
+    if (!snap.events.length) $('rowsEmpty').style.display = '';
+    connect(snap.seq);
+  } catch (e) { setConn('', 'server unreachable — retrying'); setTimeout(boot, 2000); }
+}
+setInterval(() => { if (S.lastTickAt && Date.now() - S.lastTickAt > 4000) setConn('warn', 'stalled'); }, 1000);
+setInterval(() => { if (S.lastTick) updateTopo(S.lastTick); }, 1000);
+window.addEventListener('resize', drawChart);
+$('modeSeg').addEventListener('click', async ev => {
+  const b = ev.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.m === 'enforce' && !confirm('ENFORCE: mitigation actions will be sent to the live 5G core (NRF/SMF). Continue?')) return;
+  const r = await api('POST', '/mitigation/mode/' + b.dataset.m);
+  if (r && r.status === 401) alert('Wrong control token.');
+});
+buildTopo(); buildPipe(); boot();
+</script>
+</body>
+</html>

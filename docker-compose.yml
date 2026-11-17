@@ -1,0 +1,134 @@
+# 5G Core IDRS -- Phase 1: NWDAF + Protocol Parsers
+#
+# Runs on the 5G-Core VM (192.168.56.10) only -- hosts every NF except
+# the UPF, so it sees SBI (loopback) + NGAP/PFCP (LAN) traffic.
+#
+# network_mode: host everywhere -- parsers need real interfaces, not a
+# bridge, and it keeps Redis reachable on 127.0.0.1 for all services.
+#
+# Run scripts/detect_interfaces.sh first to set LAN_IFACE in .env.
+
+services:
+  redis:
+    image: redis:7-alpine
+    network_mode: host
+    restart: unless-stopped
+    # Loopback-only by default. To let the GTP-U sensor on the UPF VM in: set REDIS_PASSWORD and
+    # REDIS_BIND="<core-lan-ip> 127.0.0.1" in .env, then run scripts/redis_firewall.sh.
+    environment:
+      - REDIS_BIND=${REDIS_BIND:-127.0.0.1}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    command: ["sh", "-c", "exec redis-server --port 6379 --appendonly no --bind $${REDIS_BIND} $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
+
+  nwdaf:
+    build:
+      context: .
+      dockerfile: nwdaf/Dockerfile
+    network_mode: host
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PORT=6379
+      - NWDAF_PORT=8090
+      - MITIGATION_MODE=${MITIGATION_MODE:-dry_run}
+      - IDRS_API_TOKEN=${IDRS_API_TOKEN:-}
+      - IDRS_PROTECT_READS=${IDRS_PROTECT_READS:-true}
+      - IDRS_NRF_POLL=${IDRS_NRF_POLL:-on}
+      - IDRS_WEBHOOK_URL=${IDRS_WEBHOOK_URL:-}
+      - IDRS_CORE_IP=${IDRS_CORE_IP:-192.168.56.10}
+      - IDRS_UPF_IP=${IDRS_UPF_IP:-192.168.56.20}
+      - IDRS_DB=/data/idrs.db
+      - NWDAF_START=${NWDAF_START:-resume}
+    volumes:
+      - ./data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  parser-sbi:
+    build:
+      context: .
+      dockerfile: parsers/sbi_http2/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - SBI_IFACE=${SBI_IFACE:-lo}
+      - SBI_PORT=7777
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  parser-pfcp:
+    build:
+      context: .
+      dockerfile: parsers/pfcp/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - PFCP_IFACE=${LAN_IFACE:-eth1}
+      - PFCP_PORT=8805
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  parser-ngap:
+    build:
+      context: .
+      dockerfile: parsers/ngap/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - NGAP_IFACE=${LAN_IFACE:-eth1}
+      - NGAP_PORT=38412
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  parser-nas:
+    build:
+      context: .
+      dockerfile: parsers/nas/Dockerfile
+    network_mode: host
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    depends_on:
+      - redis
+      - parser-ngap
+    restart: unless-stopped
+
+  parser-gtpv2c:
+    build:
+      context: .
+      dockerfile: parsers/gtpv2c/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - GTP_IFACE=${LAN_IFACE:-eth1}
+      - GTP_PORT=2123
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  parser-diameter:
+    build:
+      context: .
+      dockerfile: parsers/diameter/Dockerfile
+    network_mode: host
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - DIAMETER_IFACE=${LAN_IFACE:-eth1}
+      - DIAMETER_PORT=3868
+    depends_on:
+      - redis
+    restart: unless-stopped

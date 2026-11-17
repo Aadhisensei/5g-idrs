@@ -1,0 +1,2 @@
+pyshark==0.6
+redis==5.0.4
