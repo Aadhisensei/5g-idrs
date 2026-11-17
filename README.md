@@ -31,12 +31,12 @@ SCTP/38412).
         │
         ▼
 ┌─────────────────────────────────────────────┐
-│  Module 1: Protocol Parsers (one container   │
-│  each — a crash in one never affects others) │
-│                                               │
-│  sbi_http2 · pfcp · ngap · nas · gtpv2c ·     │
-│  diameter                                    │
-└───────────────────┬───────────────────────────┘
+│  Module 1: Protocol Parsers (one container  │
+│  each — a crash in one never affects others)│
+│                                             │
+│  sbi_http2 · pfcp · ngap · nas · gtpv2c ·   │
+│  diameter                                   │
+└───────────────────┬─────────────────────────┘
                      │ publish IDRSEvent JSON
                      ▼
               Redis Stream: ids:events
