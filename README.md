@@ -1,4 +1,4 @@
-# 5G Core IDRS — Phase 1: Custom NWDAF + Protocol Parsers
+# 5G Core IDRS : Phase 1: Custom NWDAF + Protocol Parsers
 
 Microservice-based Intrusion Detection and Response System for the 5G Core,
 built as a companion NWDAF microservice on an Open5GS testbed.
